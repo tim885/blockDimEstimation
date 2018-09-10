@@ -12,6 +12,7 @@ import shutil  # high-level file operations
 import pandas as pd  # easy csv parsing
 import numpy as np
 import matplotlib.pyplot as plt  # for visualization
+import sys
 import time
 import warnings
 
@@ -39,11 +40,12 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                     choices=model_names, help='model_architecture: ' +
                     ' | '.join(model_names) +
                     ' (default:resnet18)')  # {--arch | -a} argument 'arch' is added
-parser.add_argument('--csv_path', default='./',
+parser.add_argument('--csv_path', default='',
                     type=str, help='directory containing dataset csv files')
 parser.add_argument('--dataset_path', default='/home/xuchong/ssd/Projects/block_estimation'
                                               '/DATA/UnrealData/scenario_PV3.1/',
                     type=str, help='root directory containing images')
+parser.add_argument('dataset_name', default='', type=str, help='dataset configuration file')
 parser.add_argument('--results_path', default='results/', type=str,
                     help='directory for results storage')
 parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
@@ -54,7 +56,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.005, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -62,7 +64,7 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')  # for runtime surveillance
-parser.add_argument('--resume', default='fine_estimation/checkpoint.pth.tar', type=str, metavar='PATH',
+parser.add_argument('--resume', default='results/checkpoint.pth.tar', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')  # resume mode
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')  # dest; action
@@ -144,6 +146,10 @@ def main():
             model = torch.nn.DataParallel(model).cuda()
 
     # define loss function and optimizer
+    csv_class_weights = args.csv_path + '2018-08-14_16-36-07_weights.txt'
+    class_weights = pd.read_csv(csv_class_weights)
+    weights = torch.FloatTensor(np.array(class_weights)).cuda(args.gpu)
+
     if args.cpu:
         criterion = nn.CrossEntropyLoss()
     else:
@@ -174,6 +180,7 @@ def main():
 
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
+            sys.exit(0)
 
         cudnn.benchmark = True  # optimize cudnn if input_sz is fix, if not fixed, worse speed
     else:
@@ -184,8 +191,8 @@ def main():
 
     # dataset settings
     # load dataset configurations from csv files
-    csv_train = args.csv_path + '2018-08-13_16-19-53_train.txt'
-    csv_val = args.csv_path + '2018-08-13_16-19-53_val.txt'
+    csv_train = args.csv_path + args.dataset_name + '_train.txt'
+    csv_val = args.csv_path + args.dataset_name + '_val.txt'
 
     # imagenet statistics
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -608,7 +615,7 @@ class BlockDataset(Dataset):
         label = self.samples.iloc[idx, 1:].values
         label = label.astype('float').reshape(-1, 3)  # 1*3 narray
         label = torch.from_numpy(label)
-        label = label.long() - 1  # lua index begins at 1
+        label = label.long()
 
         if self.transform:
             image = self.transform(image)

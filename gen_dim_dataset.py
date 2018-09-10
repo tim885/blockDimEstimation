@@ -30,7 +30,7 @@ def main():
     samples = pd.read_csv(args.csv_path)
 
     # fetch sample path and dimension labels
-    imgs_path = samples['{path}']  # or samples.path
+    path = samples['{path}']  # or samples.path
     block_length = samples['{BlockSizeX}']
     block_width = samples['{BlockSizeY}']
     block_height = samples['{BlockSizeZ}']
@@ -50,6 +50,7 @@ def main():
     size_x_label = block_length*10
     size_y_label = block_width*10
     size_z_label = block_height*10
+    imgs_path = path.str.replace('\\', '/')
 
     dim_min = 25
     dim_max = 100
@@ -83,6 +84,21 @@ def main():
                            'block_dim_y': size_y_label,
                            'block_dim_z': size_z_label})
 
+    # calculate class weights and save
+    size_x_weight = np.zeros([args.numClasses[0]])
+    size_y_weight = np.zeros([args.numClasses[1]])
+    size_z_weight = np.zeros([args.numClasses[2]])
+
+    for class_idx in range(0, args.numClasses[0]):
+        size_x_weight[class_idx] = len(size_x_label) / sum(size_x_label == class_idx)
+        size_y_weight[class_idx] = len(size_y_label) / sum(size_y_label == class_idx)
+        size_z_weight[class_idx] = len(size_z_label) / sum(size_z_label == class_idx)
+
+    df_weights = pd.DataFrame({'dim_x_weight': size_x_weight,
+                               'dim_y_weight': size_y_weight,
+                               'dim_z_weight': size_z_weight})
+
+    # split training/validation set
     msk = np.random.rand(len(df_dim)) < args.train_ratio
     df_dim_train = df_dim[msk]
     df_dim_val = df_dim[~msk]
@@ -109,6 +125,7 @@ def main():
     plt.show()
 
     date_time = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())  # current date
+    df_weights.to_csv(date_time + '_weights.txt', index=False)
     df_dim_train.to_csv(date_time+'_train.txt', index=False)
     df_dim_val.to_csv(date_time + '_val.txt', index=False)
 
